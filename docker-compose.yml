@@ -1,0 +1,60 @@
+
+version: '3.8'
+
+services:
+  node:
+    build: ./node
+    container_name: node-webhook
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      - web
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      - postgres
+
+  nginx:
+    image: staticfloat/nginx-certbot
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CERTBOT_EMAIL=you@example.com
+      - CERTBOT_DOMAIN=yourdomain.com
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/data:/etc/letsencrypt
+    depends_on:
+      - node
+    networks:
+      - web
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - web
+    expose:
+      - "5432"
+
+networks:
+  web:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
