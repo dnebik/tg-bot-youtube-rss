@@ -1,0 +1,66 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  telegramId    String         @unique // ID пользователя в Telegram
+  subscriptions Subscription[] // Подписки пользователя
+  notifications Notification[] // История уведомлений
+  createdAt     DateTime       @default(now())
+}
+
+model Channel {
+  id          Int            @id @default(autoincrement())
+  youtubeId   String         @unique // ID канала на YouTube (UC...)
+  channelName String         @unique
+  title       String
+  videos      Video[]
+  subscribers Subscription[]
+  createdAt   DateTime       @default(now())
+}
+
+model Subscription {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  channelId Int
+  createdAt DateTime @default(now())
+
+  @@unique([userId, channelId]) // Один пользователь — одна подписка на канал
+}
+
+model Video {
+  id            Int            @id @default(autoincrement())
+  youtubeId     String         @unique // ID видео (например, dQw4w9WgXcQ)
+  title         String
+  url           String
+  publishedAt   DateTime
+  channel       Channel        @relation(fields: [channelId], references: [id])
+  channelId     Int
+  notifications Notification[]
+}
+
+model Notification {
+  id      Int      @id @default(autoincrement())
+  user    User     @relation(fields: [userId], references: [id])
+  userId  Int
+  video   Video    @relation(fields: [videoId], references: [id])
+  videoId Int
+  sentAt  DateTime @default(now())
+
+  @@unique([userId, videoId]) // Не отправлять уведомление дважды
+}

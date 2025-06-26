@@ -4,16 +4,28 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "bun --watch ./src",
-    "start": "bun ./src"
+    "dev": "bun --watch ./src/app.ts",
+    "start": "bun ./src/app.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@prisma/client": "^6.10.1",
+    "@types/node": "^24.0.4",
+    "axios": "^1.10.0",
+    "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "knex": "^3.1.0"
+    "prettier": "^3.6.1",
+    "prisma": "^6.10.1",
+    "rss-parser": "^3.13.0",
+    "telegraf": "^4.16.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
-    "typescript": "^5.5.3"
+    "@types/xml2js": "^0.4.14"
   },
   "private": true
 }
