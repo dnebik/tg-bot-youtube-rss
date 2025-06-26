@@ -44,6 +44,7 @@ async function getChannelByUrl(url: string) {
       },
     })
     .catch((e) => {
+      console.error(e);
       throw new Error("Апи поломалось :c\nОбратись к @dnebik");
     });
 
