@@ -5,6 +5,7 @@ services:
     build:
       dockerfile: docker/Dockerfile
       context: .
+    restart: always
     volumes:
       - .:/app    # Монтируем текущую директорию в /app внутри контейнера
       - /app/node_modules  # Исключаем node_modules из монтирования
