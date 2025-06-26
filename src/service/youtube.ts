@@ -44,7 +44,6 @@ async function getChannelByUrl(url: string) {
       },
     })
     .catch((e) => {
-      console.error(e);
       throw new Error("Апи поломалось :c\nОбратись к @dnebik");
     });
 
@@ -61,8 +60,6 @@ async function getChannelByUrl(url: string) {
       id: channelId,
     },
   });
-
-  console.log(detailsRes.data.items?.[0]);
 
   const channelData = detailsRes.data.items?.[0];
   if (!channelData) throw new Error(cannotFindMessage);
