@@ -36,8 +36,26 @@ const keyboard = Markup.keyboard([["🆕 Подписаться", "📋 Подп
 
 bot.start((ctx) => {
   ctx.reply(
-    "Привет!\nЗдесь ты можешь подписаться на рассылку о новых видио с каналов на Youtube.\n\n\nЧтобы оформить подписку воспользуйся командой `/sub [ссылка на канал]`\n\nЧтобы просмотреть список твоих активных подписок напиши `/subs`\n\nДля удаления подписки воспользуйся командой `/rm [номер из списка]`",
-    keyboard,
+    `
+    Привет! 👋🎉
+Здесь ты можешь подписаться на уведомления о новых видео с YouTube-каналов! 🎥🔔
+
+👇 Вот как это работает:
+
+📌 Чтобы оформить подписку, отправь команду:
+<code>/sub</code>
+
+📋 Чтобы посмотреть свои подписки, напиши:
+<code>/subs</code>
+
+Или просто воспользуйся удобными кнопками ниже! ⬇️😉
+
+Оставайся на связи с любимыми авторами! ❤️📺
+    `,
+    {
+      parse_mode: "HTML",
+      ...keyboard,
+    },
   );
 });
 
@@ -50,9 +68,9 @@ bot.use(stage.middleware());
 // Обработчик входа в сцену
 subscribeScene.enter(async (ctx) => {
   await ctx.reply(
-    "Отправь мне ссылку на YouTube-канал, на который хочешь подписаться\n\n" +
+    "📩 Отправь мне ссылку на YouTube-канал, на который хочешь подписаться!\n\n" +
       "Например: https://www.youtube.com/@LinusTechTips\n\n" +
-      "Для отмены нажми кнопку ниже 👇",
+      "❌ Чтобы отменить, просто нажми кнопку ниже 👇",
     {
       link_preview_options: {
         is_disabled: true,
@@ -71,24 +89,9 @@ subscribeScene.hears("❌ Отменить", async (ctx) => {
 });
 
 async function handleSubscribeSceneCancel(url: string, ctx: any) {
-  try {
-    const user = await getUserByTgId(String(ctx.chat.id));
-    await subscribeToYouTubeChannel(user.id, url);
-
-    await ctx.reply("✅ Подписка успешно оформлена!", keyboard);
-  } catch (e) {
-    const defaultMessage =
-      "Не удалось обработать ссылку 😥\nПопробуй еще раз или нажми кнопку отмены";
-
-    if (!(e instanceof Error)) {
-      ctx.reply(defaultMessage);
-      throw e;
-    }
-
-    const message = e.message || defaultMessage;
-    ctx.reply(message);
-    throw e;
-  }
+  const user = await getUserByTgId(String(ctx.chat.id));
+  await subscribeToYouTubeChannel(user.id, url);
+  await ctx.reply("✅ Подписка успешно оформлена!", keyboard);
 }
 
 subscribeScene.on(message("text"), async (ctx) => {
@@ -96,12 +99,16 @@ subscribeScene.on(message("text"), async (ctx) => {
   try {
     await handleSubscribeSceneCancel(url, ctx);
     await ctx.scene.leave();
-  } catch {}
+  } catch (e) {
+    ctx.reply(
+      "😥 Ой, не получилось обработать ссылку.\nПопробуй ещё раз или нажми «Отмена» ниже ⬇️",
+    );
+  }
 });
 // Добавим также обработчик для неподдерживаемых типов сообщений
 subscribeScene.on(message(), async (ctx) => {
   await ctx.reply(
-    "Пожалуйста, отправь мне ссылку на канал в виде текста или нажми кнопку отмены",
+    "🙏 Пожалуйста, отправь ссылку на канал **в виде текста** или нажми кнопку **Отмена** ниже ⬇️",
   );
 });
 
@@ -137,7 +144,12 @@ async function showSubscriptionsPage(ctx: any, page: number) {
   });
 
   if (!subs.length) {
-    return ctx.reply("У тебя нет подписок", keyboard);
+    return ctx.reply("🔍 Подписок пока нет.\nДавай это исправим? 😉", {
+      ...keyboard,
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("🆕 Подписаться на канал", "subscribe")],
+      ]),
+    });
   }
 
   const totalPages = Math.ceil(subs.length / ITEMS_PER_PAGE);
@@ -215,6 +227,11 @@ bot.action(/^page:(\d+)$/, async (ctx) => {
   await ctx.deleteMessage();
 });
 
+bot.action("subscribe", (ctx) => {
+  ctx.answerCbQuery();
+  return ctx.scene.enter("subscribe");
+});
+
 bot.action(/^delete_sub:(.+)$/, async (ctx) => {
   const subId = ctx.match[1];
 
@@ -250,7 +267,7 @@ async function handleVideoAdded(video: Video, channel: Channel) {
   if (!users.length) return;
 
   for (const user of users) {
-    const message = `Новое видео на канале ${channel.title}!\n${video.title}\n${video.url}`;
+    const message = `✨ Новинка на <b>${channel.title}</b>:\n <a href="${video.url}">${video.title}</a>`;
 
     await bot.telegram.sendMessage(user.telegramId, message, {
       parse_mode: "HTML",

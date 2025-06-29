@@ -47,7 +47,7 @@ async function getChannelByUrl(url: string) {
     });
 
   const items = response.data.items;
-  if (items?.length === 0) throw new Error(cannotFindMessage);
+  if (!items || items?.length === 0) throw new Error(cannotFindMessage);
 
   const closest = items[0];
   const channelId = closest.id;
