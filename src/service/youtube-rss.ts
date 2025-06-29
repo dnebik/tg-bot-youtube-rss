@@ -114,7 +114,7 @@ async function checkNewVideosInAllChannels() {
     try {
       await checkNewVideosInChannel(channel);
     } catch (e) {
-      console.log("Error: ", e?.message || e);
+      console.log("Error: ", (e as any)?.message || e);
     }
   }
 }
