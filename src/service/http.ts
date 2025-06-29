@@ -1,5 +1,4 @@
 import axios from "axios";
-import needle from "needle";
 
 const APP_PROXY_HOST = process.env.APP_PROXY_HOST;
 const APP_PROXY_PORT = process.env.APP_PROXY_PORT;
