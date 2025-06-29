@@ -35,12 +35,10 @@ async function getChannelByUrl(url: string) {
 
   // поиск канала
   const response = await youtubeHttp
-    .get("/search", {
+    .get("/channels", {
       params: {
-        q: channelName,
+        forHandle: channelName,
         part: "snippet",
-        type: "channel",
-        maxResults: 1,
       },
     })
     .catch((e) => {
@@ -52,7 +50,7 @@ async function getChannelByUrl(url: string) {
   if (items.length === 0) throw new Error(cannotFindMessage);
 
   const closest = items[0];
-  const channelId = closest.snippet.channelId;
+  const channelId = closest.id;
 
   // Инфа о канале
   const detailsRes = await youtubeHttp.get("/channels", {
