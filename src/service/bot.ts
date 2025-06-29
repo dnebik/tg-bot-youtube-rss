@@ -109,42 +109,6 @@ bot.command("sub", (ctx) => {
   return ctx.scene.enter("subscribe");
 });
 
-bot.command("rm", async (ctx) => {
-  const index = Number(ctx.message.text.split(" ")[1]);
-  if (Number.isNaN(index)) {
-    ctx.reply("Укажите номер подписки для удаления. Пример /remove 1");
-    return;
-  }
-
-  const sub = await prisma.subscription.findFirst({
-    skip: index - 1,
-    take: 1,
-    where: {
-      user: {
-        telegramId: String(ctx.chat.id),
-      },
-    },
-    include: {
-      channel: true,
-    },
-  });
-
-  if (!sub) {
-    ctx.reply(
-      "Не удалось найти подписку с данным номером. Уточните номер подписки командой /subscriptions",
-    );
-    return;
-  }
-
-  await prisma.subscription.delete({
-    where: {
-      id: sub.id,
-    },
-  });
-
-  ctx.reply("Подписка удалена");
-});
-
 // Обновленный обработчик команды /subs
 bot.command("subs", async (ctx) => {
   await showSubscriptionsPage(ctx, 0);
@@ -173,7 +137,7 @@ async function showSubscriptionsPage(ctx: any, page: number) {
   });
 
   if (!subs.length) {
-    return ctx.reply("У тебя нет подписок");
+    return ctx.reply("У тебя нет подписок", keyboard);
   }
 
   const totalPages = Math.ceil(subs.length / ITEMS_PER_PAGE);
@@ -190,7 +154,7 @@ async function showSubscriptionsPage(ctx: any, page: number) {
   message += `\n\nСтраница ${page + 1} из ${totalPages}`;
 
   // Создаем клавиатуру с кнопками навигации и удаления
-  const keyboard = [];
+  const keyboardInline = [];
 
   // Кнопки для удаления подписок
   for (let i = 0; i < currentPageSubs.length; i += 2) {
@@ -212,7 +176,7 @@ async function showSubscriptionsPage(ctx: any, page: number) {
       });
     }
 
-    keyboard.push(row);
+    keyboardInline.push(row);
   }
 
   // Кнопки навигации
@@ -230,7 +194,7 @@ async function showSubscriptionsPage(ctx: any, page: number) {
     });
   }
   if (navigationRow.length > 0) {
-    keyboard.push(navigationRow);
+    keyboardInline.push(navigationRow);
   }
 
   await ctx.reply(message, {
@@ -238,7 +202,8 @@ async function showSubscriptionsPage(ctx: any, page: number) {
     link_preview_options: {
       is_disabled: true,
     },
-    ...Markup.inlineKeyboard(keyboard),
+    ...keyboard,
+    ...Markup.inlineKeyboard(keyboardInline),
   });
 }
 
