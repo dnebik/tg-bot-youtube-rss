@@ -136,6 +136,13 @@ async function handleVideoAdded(video: Video, channel: Channel) {
         is_disabled: false,
       },
     });
+
+    prisma.notification.create({
+      data: {
+        userId: user.id,
+        videoId: video.id,
+      },
+    });
   }
 }
 

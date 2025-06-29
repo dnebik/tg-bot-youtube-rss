@@ -1,15 +1,15 @@
 import axios from "axios";
-import { SocksProxyAgent } from "socks-proxy-agent";
-
-export const http = axios.create();
+import needle from "needle";
 
 const APP_PROXY_HOST = process.env.APP_PROXY_HOST;
 const APP_PROXY_PORT = process.env.APP_PROXY_PORT;
 
+export const http = axios.create();
+
 if (APP_PROXY_HOST && APP_PROXY_PORT) {
-  const agent = new SocksProxyAgent(
-    `socks5h://${APP_PROXY_HOST}:${APP_PROXY_PORT}`,
-  );
-  http.defaults.httpsAgent = agent;
-  http.defaults.httpAgent = agent;
+  http.defaults.proxy = {
+    protocol: "http",
+    host: APP_PROXY_HOST,
+    port: Number(APP_PROXY_PORT),
+  };
 }
