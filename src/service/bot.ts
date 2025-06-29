@@ -1,81 +1,112 @@
-import { Telegraf } from "telegraf";
+import { Telegraf, Markup, Scenes, Context, session } from "telegraf";
 import * as process from "node:process";
 import { getUserByTgId } from "@/helpers/getUserByTgId";
 import { subscribeToYouTubeChannel } from "@/service/youtube";
 import { youtubeEvents } from "@/service/youtube-rss";
 import { Channel, Video } from "@/generated/prisma";
 import prisma from "@/service/prisma";
+import { message } from "telegraf/filters";
+
+interface MySessionData extends Scenes.SceneSession {
+  // Можно добавить дополнительные поля сессии если нужно
+}
+
+// Определяем базовый интерфейс для контекста
+interface MyContext extends Context {
+  scene: Scenes.SceneContextScene<MyContext>;
+  session: MySessionData;
+}
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const ITEMS_PER_PAGE = 6;
 
 if (!BOT_TOKEN) {
   throw new Error("BOT_TOKEN is not defined");
 }
 
-const bot = new Telegraf(BOT_TOKEN);
+const bot = new Telegraf<MyContext>(BOT_TOKEN);
+
+bot.telegram.setMyCommands([
+  { command: "/start", description: "О боте" },
+  { command: "/subs", description: "Список подписок" },
+  { command: "/sub", description: "Оформить подписку" },
+]);
+
+const keyboard = Markup.keyboard([["🆕 Подписаться", "📋 Подписки"]]).resize();
 
 bot.start((ctx) => {
   ctx.reply(
     "Привет!\nЗдесь ты можешь подписаться на рассылку о новых видио с каналов на Youtube.\n\n\nЧтобы оформить подписку воспользуйся командой `/sub [ссылка на канал]`\n\nЧтобы просмотреть список твоих активных подписок напиши `/subs`\n\nДля удаления подписки воспользуйся командой `/rm [номер из списка]`",
+    keyboard,
+  );
+});
+
+const subscribeScene = new Scenes.BaseScene<MyContext>("subscribe");
+const stage = new Scenes.Stage<MyContext>([subscribeScene]);
+
+bot.use(session());
+bot.use(stage.middleware());
+
+// Обработчик входа в сцену
+subscribeScene.enter(async (ctx) => {
+  await ctx.reply(
+    "Отправь мне ссылку на YouTube-канал, на который хочешь подписаться\n\n" +
+      "Например: https://www.youtube.com/@LinusTechTips\n\n" +
+      "Для отмены нажми кнопку ниже 👇",
     {
-      parse_mode: "Markdown",
+      link_preview_options: {
+        is_disabled: true,
+      },
+      ...Markup.keyboard([["❌ Отменить"]])
+        .oneTime()
+        .resize(),
     },
   );
 });
 
-bot.command("sub", async (ctx) => {
-  const command = ctx.message.text.split(" ")[1];
-  if (!command)
-    return ctx.reply(
-      "Укажи ссылку на канал. Пример: /subscribe https://www.youtube.com/@LinusTechTips",
-    );
-
-  console.log(command);
-
-  try {
-    const user = await getUserByTgId(String(ctx.chat.id));
-    await subscribeToYouTubeChannel(user.id, command);
-    ctx.reply("Подписка оформлена");
-  } catch (e) {
-    const defaultMessage = "Не удалось обработать ссылочку :c";
-    if (!(e instanceof Error)) return ctx.reply(defaultMessage);
-
-    const message = e.message || defaultMessage;
-    return ctx.reply(message);
-  }
+// Обработчик отмены
+subscribeScene.hears("❌ Отменить", async (ctx) => {
+  await ctx.reply("Оформление подписки отменено", keyboard);
+  return await ctx.scene.leave();
 });
 
-bot.command("subs", async (ctx) => {
-  const subs = await prisma.subscription.findMany({
-    where: {
-      user: {
-        telegramId: String(ctx.chat.id),
-      },
-    },
-    include: {
-      channel: true,
-    },
-  });
+async function handleSubscribeSceneCancel(url: string, ctx: any) {
+  try {
+    const user = await getUserByTgId(String(ctx.chat.id));
+    await subscribeToYouTubeChannel(user.id, url);
 
-  if (!subs.length) {
-    ctx.reply("У тебя нет подписок");
-    return;
+    await ctx.reply("✅ Подписка успешно оформлена!", keyboard);
+  } catch (e) {
+    const defaultMessage =
+      "Не удалось обработать ссылку 😥\nПопробуй еще раз или нажми кнопку отмены";
+
+    if (!(e instanceof Error)) {
+      ctx.reply(defaultMessage);
+      throw e;
+    }
+
+    const message = e.message || defaultMessage;
+    ctx.reply(message);
+    throw e;
   }
+}
 
-  let message = "Твои подписки: ";
-  let index = 0;
+subscribeScene.on(message("text"), async (ctx) => {
+  const url = ctx.message.text;
+  try {
+    await handleSubscribeSceneCancel(url, ctx);
+    await ctx.scene.leave();
+  } catch {}
+});
+// Добавим также обработчик для неподдерживаемых типов сообщений
+subscribeScene.on(message(), async (ctx) => {
+  await ctx.reply(
+    "Пожалуйста, отправь мне ссылку на канал в виде текста или нажми кнопку отмены",
+  );
+});
 
-  for (const sub of subs) {
-    message += `\n  [${index + 1}]: <a href="https://youtube.com/@${sub.channel.channelName}">${sub.channel.title}</a>  <code>/rm ${index + 1}</code>`;
-    index++;
-  }
-
-  await bot.telegram.sendMessage(ctx.chat.id, message, {
-    parse_mode: "HTML",
-    link_preview_options: {
-      is_disabled: true,
-    },
-  });
+bot.command("sub", (ctx) => {
+  return ctx.scene.enter("subscribe");
 });
 
 bot.command("rm", async (ctx) => {
@@ -114,6 +145,132 @@ bot.command("rm", async (ctx) => {
   ctx.reply("Подписка удалена");
 });
 
+// Обновленный обработчик команды /subs
+bot.command("subs", async (ctx) => {
+  await showSubscriptionsPage(ctx, 0);
+});
+
+// Обновляем обработчик для кнопки подписки
+bot.hears("🆕 Подписаться", (ctx) => {
+  return ctx.scene.enter("subscribe");
+});
+
+bot.hears("📋 Подписки", async (ctx) => {
+  await showSubscriptionsPage(ctx, 0);
+});
+
+// Функция для отображения страницы подписок
+async function showSubscriptionsPage(ctx: any, page: number) {
+  const subs = await prisma.subscription.findMany({
+    where: {
+      user: {
+        telegramId: String(ctx.chat.id),
+      },
+    },
+    include: {
+      channel: true,
+    },
+  });
+
+  if (!subs.length) {
+    return ctx.reply("У тебя нет подписок");
+  }
+
+  const totalPages = Math.ceil(subs.length / ITEMS_PER_PAGE);
+  const startIndex = page * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, subs.length);
+  const currentPageSubs = subs.slice(startIndex, endIndex);
+
+  let message = "Твои подписки:\n";
+  currentPageSubs.forEach((sub, idx) => {
+    const globalIndex = startIndex + idx + 1;
+    message += `\n${globalIndex}. <a href="https://youtube.com/@${sub.channel.channelName}">${sub.channel.title}</a>`;
+  });
+
+  message += `\n\nСтраница ${page + 1} из ${totalPages}`;
+
+  // Создаем клавиатуру с кнопками навигации и удаления
+  const keyboard = [];
+
+  // Кнопки для удаления подписок
+  for (let i = 0; i < currentPageSubs.length; i += 2) {
+    const row = [];
+
+    // Добавляем первую кнопку в паре
+    const globalIndex1 = startIndex + i + 1;
+    row.push({
+      text: `❌ Удалить ${globalIndex1}`,
+      callback_data: `delete_sub:${currentPageSubs[i].id}`,
+    });
+
+    // Добавляем вторую кнопку, если она есть
+    if (i + 1 < currentPageSubs.length) {
+      const globalIndex2 = startIndex + i + 2;
+      row.push({
+        text: `❌ Удалить ${globalIndex2}`,
+        callback_data: `delete_sub:${currentPageSubs[i + 1].id}`,
+      });
+    }
+
+    keyboard.push(row);
+  }
+
+  // Кнопки навигации
+  const navigationRow = [];
+  if (page > 0) {
+    navigationRow.push({
+      text: "⬅️ Назад",
+      callback_data: `page:${page - 1}`,
+    });
+  }
+  if (page < totalPages - 1) {
+    navigationRow.push({
+      text: "Вперед ➡️",
+      callback_data: `page:${page + 1}`,
+    });
+  }
+  if (navigationRow.length > 0) {
+    keyboard.push(navigationRow);
+  }
+
+  await ctx.reply(message, {
+    parse_mode: "HTML",
+    link_preview_options: {
+      is_disabled: true,
+    },
+    ...Markup.inlineKeyboard(keyboard),
+  });
+}
+
+// Обработчики callback-запросов для кнопок
+bot.action(/^page:(\d+)$/, async (ctx) => {
+  const page = parseInt(ctx.match[1]);
+  await ctx.answerCbQuery();
+  await showSubscriptionsPage(ctx, page);
+  await ctx.deleteMessage();
+});
+
+bot.action(/^delete_sub:(.+)$/, async (ctx) => {
+  const subId = ctx.match[1];
+
+  try {
+    await prisma.subscription.delete({
+      where: {
+        id: Number(subId),
+      },
+    });
+
+    await ctx.answerCbQuery("Подписка удалена!");
+
+    // Показываем обновленный список на той же странице
+    const currentPage = 0; // Можно добавить логику определения текущей страницы
+    await showSubscriptionsPage(ctx, currentPage);
+    await ctx.deleteMessage();
+  } catch (error) {
+    await ctx.answerCbQuery("Ошибка при удалении подписки");
+  }
+});
+
 async function handleVideoAdded(video: Video, channel: Channel) {
   const users = await prisma.user.findMany({
     where: {
@@ -145,7 +302,6 @@ async function handleVideoAdded(video: Video, channel: Channel) {
     });
   }
 }
-
 youtubeEvents.add("video-added", handleVideoAdded);
 
 export function startBot() {
