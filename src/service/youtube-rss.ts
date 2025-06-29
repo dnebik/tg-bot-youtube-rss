@@ -32,7 +32,17 @@ function fixEntry(entry: any): YouTubeVideo {
 
 async function getYoutubeVideosFromChannel(channel: Channel) {
   const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channel.youtubeId}`;
-  const response = await http.get(feedUrl);
+  const response = await http
+    .get(feedUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/rss+xml",
+      },
+    })
+    .catch((e) => {
+      console.error(e?.message || e);
+      throw e;
+    });
   const xml = await parseStringPromise(response.data);
   return (xml.feed.entry.map(fixEntry) || []) as YouTubeVideo[];
 }
@@ -101,7 +111,11 @@ async function checkNewVideosInChannel(channel: Channel) {
 async function checkNewVideosInAllChannels() {
   const channels = await getAllChannelsWithActiveSubscriptions();
   for (const channel of channels) {
-    await checkNewVideosInChannel(channel);
+    try {
+      await checkNewVideosInChannel(channel);
+    } catch (e) {
+      console.log("Error: ", e?.message || e);
+    }
   }
 }
 
