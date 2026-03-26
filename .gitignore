@@ -13,3 +13,6 @@ yarn-error.log*
 
 .env
 /src/generated/
+
+CLAUDE.md
+.claude

@@ -4,21 +4,19 @@ import prisma from "@/service/prisma";
 export async function subscribeToYouTubeChannel(userId: number, url: string) {
   const channel = await getChannelByUrl(url);
 
-  const isHasSub = await prisma.subscription.findFirst({
-    where: {
-      userId,
-      channelId: channel.id,
-    },
-  });
-
-  if (isHasSub) throw new Error("Данный канал уже в ваших подписках");
-
-  await prisma.subscription.create({
-    data: {
-      channelId: channel.id,
-      userId: userId,
-    },
-  });
+  try {
+    await prisma.subscription.create({
+      data: {
+        channelId: channel.id,
+        userId: userId,
+      },
+    });
+  } catch (e: any) {
+    if (e?.code === "P2002") {
+      throw new Error("Данный канал уже в ваших подписках");
+    }
+    throw e;
+  }
 }
 
 async function getChannelByUrl(url: string) {

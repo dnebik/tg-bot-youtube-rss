@@ -100,9 +100,8 @@ subscribeScene.on(message("text"), async (ctx) => {
     await handleSubscribeSceneCancel(url, ctx);
     await ctx.scene.leave();
   } catch (e) {
-    ctx.reply(
-      "😥 Ой, не получилось обработать ссылку.\nПопробуй ещё раз или нажми «Отмена» ниже ⬇️",
-    );
+    const msg = e instanceof Error ? e.message : "Неизвестная ошибка";
+    ctx.reply(`😥 ${msg}\nПопробуй ещё раз или нажми «Отмена» ниже ⬇️`);
   }
 });
 // Добавим также обработчик для неподдерживаемых типов сообщений
@@ -276,7 +275,7 @@ async function handleVideoAdded(video: Video, channel: Channel) {
       },
     });
 
-    prisma.notification.create({
+    await prisma.notification.create({
       data: {
         userId: user.id,
         videoId: video.id,
@@ -288,4 +287,8 @@ youtubeEvents.add("video-added", handleVideoAdded);
 
 export function startBot() {
   bot.launch();
+}
+
+export function stopBot() {
+  bot.stop();
 }

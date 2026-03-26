@@ -44,7 +44,7 @@ async function getYoutubeVideosFromChannel(channel: Channel) {
       throw e;
     });
   const xml = await parseStringPromise(response.data);
-  return (xml.feed.entry.map(fixEntry) || []) as YouTubeVideo[];
+  return (xml.feed.entry?.map(fixEntry) ?? []) as YouTubeVideo[];
 }
 
 function getAllChannelsWithActiveSubscriptions() {
@@ -110,16 +110,25 @@ async function checkNewVideosInChannel(channel: Channel) {
 
 async function checkNewVideosInAllChannels() {
   const channels = await getAllChannelsWithActiveSubscriptions();
-  for (const channel of channels) {
-    try {
-      await checkNewVideosInChannel(channel);
-    } catch (e) {
-      console.log("Error: ", (e as any)?.message || e);
-    }
-  }
+  await Promise.allSettled(
+    channels.map((channel) =>
+      checkNewVideosInChannel(channel).catch((e) =>
+        console.log("Error: ", (e as any)?.message || e),
+      ),
+    ),
+  );
 }
 
+let intervalId: ReturnType<typeof setInterval> | null = null;
+
 export function startYoutubeRss() {
-  setInterval(checkNewVideosInAllChannels, INTERVAL);
+  intervalId = setInterval(checkNewVideosInAllChannels, INTERVAL);
   checkNewVideosInAllChannels();
+}
+
+export function stopYoutubeRss() {
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
 }
