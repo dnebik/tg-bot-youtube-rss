@@ -2,7 +2,10 @@ import prisma from "@/service/prisma";
 import { Channel, Video } from "@/generated/prisma";
 import { createEventBus } from "@/helpers/createEventBus";
 import { http } from "@/service/http";
+import { createLogger } from "@/helpers/logger";
 import { parseStringPromise } from "xml2js";
+
+const log = createLogger("youtube-rss");
 
 const INTERVAL = 2 * 60 * 1000;
 
@@ -32,17 +35,12 @@ function fixEntry(entry: any): YouTubeVideo {
 
 async function getYoutubeVideosFromChannel(channel: Channel) {
   const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channel.youtubeId}`;
-  const response = await http
-    .get(feedUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "application/rss+xml",
-      },
-    })
-    .catch((e) => {
-      console.error(e?.message || e);
-      throw e;
-    });
+  const response = await http.get(feedUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      Accept: "application/rss+xml",
+    },
+  });
   const xml = await parseStringPromise(response.data);
   return (xml.feed.entry?.map(fixEntry) ?? []) as YouTubeVideo[];
 }
@@ -93,6 +91,10 @@ async function checkNewVideosInChannel(channel: Channel) {
 
   if (!isFilled) {
     for (const video of videos) await writeVideoToDb(video, channel);
+    log.info(`Backfilled ${videos.length} videos`, {
+      channel: channel.title,
+      youtubeId: channel.youtubeId,
+    });
     return;
   }
 
@@ -104,24 +106,33 @@ async function checkNewVideosInChannel(channel: Channel) {
 
   for (const video of videos) {
     const isNew = videosInDb.every((v) => v.youtubeId !== video.id);
-    if (isNew) await writeVideoToDb(video, channel, true);
+    if (isNew) {
+      await writeVideoToDb(video, channel, true);
+      log.info(`New video found: ${video.title}`, {
+        channel: channel.title,
+      });
+    }
   }
 }
 
 async function checkNewVideosInAllChannels() {
   const channels = await getAllChannelsWithActiveSubscriptions();
-  await Promise.allSettled(
-    channels.map((channel) =>
-      checkNewVideosInChannel(channel).catch((e) =>
-        console.log("Error: ", (e as any)?.message || e),
-      ),
-    ),
+  log.debug(`Checking ${channels.length} channels`);
+
+  const results = await Promise.allSettled(
+    channels.map((channel) => checkNewVideosInChannel(channel)),
   );
+
+  const failed = results.filter((r) => r.status === "rejected");
+  if (failed.length > 0) {
+    log.warn(`${failed.length}/${channels.length} channel checks failed`);
+  }
 }
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
 export function startYoutubeRss() {
+  log.info(`Starting RSS polling, interval: ${INTERVAL / 1000}s`);
   intervalId = setInterval(checkNewVideosInAllChannels, INTERVAL);
   checkNewVideosInAllChannels();
 }
@@ -130,5 +141,6 @@ export function stopYoutubeRss() {
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
+    log.info("RSS polling stopped");
   }
 }

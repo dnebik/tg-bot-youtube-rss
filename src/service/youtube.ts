@@ -1,5 +1,8 @@
 import { youtubeHttp } from "@/service/youtube-http";
 import prisma from "@/service/prisma";
+import { createLogger, extractAxiosErrorDetails } from "@/helpers/logger";
+
+const log = createLogger("youtube");
 
 export async function subscribeToYouTubeChannel(userId: number, url: string) {
   const channel = await getChannelByUrl(url);
@@ -32,17 +35,21 @@ async function getChannelByUrl(url: string) {
   if (channelFromDb) return channelFromDb;
 
   // поиск канала
-  const response = await youtubeHttp
-    .get("/channels", {
+  let response;
+  try {
+    response = await youtubeHttp.get("/channels", {
       params: {
         forHandle: channelName,
         part: "snippet",
       },
-    })
-    .catch((e) => {
-      console.error(e);
-      throw new Error("Апи поломалось :c\nОбратись к @dnebik");
     });
+  } catch (e) {
+    log.error(
+      `Failed to search channel: ${channelName}`,
+      extractAxiosErrorDetails(e),
+    );
+    throw new Error("Апи поломалось :c\nОбратись к @dnebik");
+  }
 
   const items = response.data.items;
   if (!items || items?.length === 0) throw new Error(cannotFindMessage);
@@ -51,12 +58,21 @@ async function getChannelByUrl(url: string) {
   const channelId = closest.id;
 
   // Инфа о канале
-  const detailsRes = await youtubeHttp.get("/channels", {
-    params: {
-      part: "snippet,brandingSettings",
-      id: channelId,
-    },
-  });
+  let detailsRes;
+  try {
+    detailsRes = await youtubeHttp.get("/channels", {
+      params: {
+        part: "snippet,brandingSettings",
+        id: channelId,
+      },
+    });
+  } catch (e) {
+    log.error(
+      `Failed to get channel details: ${channelId}`,
+      extractAxiosErrorDetails(e),
+    );
+    throw new Error("Апи поломалось :c\nОбратись к @dnebik");
+  }
 
   const channelData = detailsRes.data.items?.[0];
   if (!channelData) throw new Error(cannotFindMessage);
@@ -70,6 +86,11 @@ async function getChannelByUrl(url: string) {
     throw new Error(`Канал ${channelName} не удалось найти`);
 
   const realName = snippet.title;
+
+  log.info(`Resolved channel: ${realName}`, {
+    handle: customUrl,
+    youtubeId: channelId,
+  });
 
   return prisma.channel.create({
     data: {

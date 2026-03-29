@@ -6,6 +6,9 @@ import { youtubeEvents } from "@/service/youtube-rss";
 import { Channel, Video } from "@/generated/prisma";
 import prisma from "@/service/prisma";
 import { message } from "telegraf/filters";
+import { createLogger } from "@/helpers/logger";
+
+const log = createLogger("bot");
 
 interface MySessionData extends Scenes.SceneSession {
   // Можно добавить дополнительные поля сессии если нужно
@@ -265,28 +268,42 @@ async function handleVideoAdded(video: Video, channel: Channel) {
 
   if (!users.length) return;
 
+  log.info(`Sending notifications for "${video.title}"`, {
+    channel: channel.title,
+    userCount: users.length,
+  });
+
   for (const user of users) {
-    const message = `✨ Новинка на <b>${channel.title}</b>:\n <a href="${video.url}">${video.title}</a>`;
+    try {
+      const text = `✨ Новинка на <b>${channel.title}</b>:\n <a href="${video.url}">${video.title}</a>`;
 
-    await bot.telegram.sendMessage(user.telegramId, message, {
-      parse_mode: "HTML",
-      link_preview_options: {
-        is_disabled: false,
-      },
-    });
+      await bot.telegram.sendMessage(user.telegramId, text, {
+        parse_mode: "HTML",
+        link_preview_options: {
+          is_disabled: false,
+        },
+      });
 
-    await prisma.notification.create({
-      data: {
-        userId: user.id,
-        videoId: video.id,
-      },
-    });
+      await prisma.notification.create({
+        data: {
+          userId: user.id,
+          videoId: video.id,
+        },
+      });
+    } catch (e) {
+      log.error(`Failed to notify user ${user.telegramId}`, {
+        video: video.title,
+        channel: channel.title,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 }
 youtubeEvents.add("video-added", handleVideoAdded);
 
 export function startBot() {
   bot.launch();
+  log.info("Bot launched");
 }
 
 export function stopBot() {

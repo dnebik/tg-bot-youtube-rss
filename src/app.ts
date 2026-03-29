@@ -2,14 +2,17 @@ import "dotenv/config";
 import { startBot, stopBot } from "@/service/bot";
 import { startYoutubeRss, stopYoutubeRss } from "@/service/youtube-rss";
 import prisma from "@/service/prisma";
+import { createLogger } from "@/helpers/logger";
+
+const log = createLogger("app");
 
 startBot();
 startYoutubeRss();
 
-console.log("🚀 Bot started successfully!");
+log.info("Bot started successfully");
 
 async function shutdown() {
-  console.log("Shutting down...");
+  log.info("Shutting down...");
   stopBot();
   stopYoutubeRss();
   await prisma.$disconnect();
