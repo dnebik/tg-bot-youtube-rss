@@ -22,6 +22,9 @@ if (APP_PROXY_HOST && APP_PROXY_PORT) {
     port: APP_PROXY_PORT,
   });
 } else {
+  // Явно отключаем прокси, чтобы axios не подхватывал
+  // HTTP_PROXY / HTTPS_PROXY из окружения через proxy-from-env
+  http.defaults.proxy = false;
   log.info("No proxy configured, using direct connection");
 }
 
